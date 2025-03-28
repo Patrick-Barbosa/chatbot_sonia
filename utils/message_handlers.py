@@ -1,57 +1,50 @@
 from .whatsapp_api import WhatsAppAPI
+from .database_functions import check_phone_number, get_client_first_name, check_user_debts, get_user_debt_amount
+from .payment_handlers import PaymentHandlers
 
 class MessageHandlers:
     def __init__(self):
         self.api = WhatsAppAPI()
-    
+        self.payment_handlers = PaymentHandlers()
+
     def handle_initial_state(self, user_id, message_text):
         """Fluxo inicial da conversa"""
         if "oi" in message_text.lower() or "olá" in message_text.lower():
-            self.api.send_message(user_id, "Olá! Como posso ajudar? Escolha uma opção:\n1. Suporte\n2. Vendas\n3. Informações")
-            return "AWAITING_RESPONSE"
+            # Consulta o banco de dados para verificar o número de telefone
+            user_exists = check_phone_number(user_id)
+            if user_exists:
+                first_name = get_client_first_name(user_id)  # Retrieve the client's first name
+                self.api.send_message(user_id, f"Olá, {first_name}! Tudo bem?")
+                return "CHECK_DEBTS"  # Proceed to check debts
+            else:
+                self.api.send_message(user_id, "Olá, tudo bem? Não tenho seu número relacionado no soniatech!")
+                self.api.send_message(user_id, "Para resolver isso, insira seu número no soniatech! Te espero na próxima!")
+                return "END_FLOW"
         return "INITIAL"
     
-    def handle_awaiting_response(self, user_id, message_text):
-        """Trata a resposta do menu inicial"""
-        if message_text == "1":
-            self.api.send_message(user_id, "Ótimo! Por favor, descreva seu problema de suporte.")
-            return "SUPPORT_DESCRIPTION"
-        elif message_text == "2":
-            self.api.send_message(user_id, "Você quer comprar qual produto?\nA. Produto X\nB. Produto Y")
-            return "SALES_SELECTION"
-        elif message_text == "3":
-            self.api.send_message(user_id, "Nossos horários são:\nSeg-Sex: 9h-18h\nSáb: 9h-13h")
-            return "INITIAL"
+    def handle_check_debts(self, user_id, message_text):
+        """Consulta dívidas do usuário"""
+        has_debts = check_user_debts(user_id)
+        if has_debts:
+            debt_amount = get_user_debt_amount(user_id)  # Retrieve the total debt amount
+            self.api.send_message(user_id, f"Você possui dívidas pendentes no valor de R$ {debt_amount:.2f}. Deseja pagar as dívidas? (sim/não)")
+            return "AWAITING_DEBT_PAYMENT"
         else:
-            self.api.send_message(user_id, "Opção inválida. Por favor, escolha 1, 2 ou 3.")
-            return "AWAITING_RESPONSE"
+            self.api.send_message(user_id, "Nenhuma dívida a ser paga!")
+            return "AWAITING_ACTION"
     
-    def handle_support_description(self, user_id, message_text):
-        """Processa descrição de suporte"""
-        self.api.send_message(user_id, "Recebemos sua solicitação! Um técnico entrará em contato em breve.")
-        # Aqui você pode salvar no banco de dados
-        return "INITIAL"
-    
-    def handle_sales_selection(self, user_id, message_text):
-        """Processa seleção de produto"""
-        if message_text.upper() == "A":
-            self.api.send_message(user_id, "Produto X selecionado. Valor: R$ 99,90. Deseja finalizar? (sim/não)")
-            return "CONFIRM_PURCHASE"
-        elif message_text.upper() == "B":
-            self.api.send_message(user_id, "Produto Y selecionado. Valor: R$ 149,90. Deseja finalizar? (sim/não)")
-            return "CONFIRM_PURCHASE"
-        else:
-            self.api.send_message(user_id, "Opção inválida. Escolha A ou B.")
-            return "SALES_SELECTION"
-    
-    def handle_confirm_purchase(self, user_id, message_text):
-        """Confirmação de compra"""
+    def handle_awaiting_debt_payment(self, user_id, message_text):
+        """Processa decisão de pagamento de dívidas"""
         if message_text.lower() == "sim":
-            self.api.send_message(user_id, "Compra confirmada! Enviaremos os detalhes por email.")
-            return "INITIAL"
+            return self.payment_handlers.handle_pix_payment(user_id)
         elif message_text.lower() == "não":
-            self.api.send_message(user_id, "Compra cancelada. Volte sempre!")
+            self.api.send_message(user_id, "Entendido! Caso mude de ideia, estamos à disposição.")
             return "INITIAL"
         else:
             self.api.send_message(user_id, "Por favor, responda com 'sim' ou 'não'.")
-            return "CONFIRM_PURCHASE"
+            return "AWAITING_DEBT_PAYMENT"
+    
+    def handle_awaiting_action(self, user_id, message_text):
+        """Trata ações após saudação"""
+        self.api.send_message(user_id, "O que deseja fazer?")
+        return "AWAITING_RESPONSE"

@@ -57,9 +57,5 @@ def webhook():
         
         return jsonify({"status": "success"}), 200
 
-@app.route('/healthcheck', methods=['GET', 'HEAD'])
-def healthcheck():
-    return '', 200  # Resposta vazia com status 200
-
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=os.getenv("PORT"), debug=True)
