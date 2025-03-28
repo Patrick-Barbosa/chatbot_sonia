@@ -1,2 +1,0 @@
-iniciar local tunneling
-lt --port 7777 --2804:41e4:8c88:8f00:aefe:1269:75c2:4cf4 ptrk9934
