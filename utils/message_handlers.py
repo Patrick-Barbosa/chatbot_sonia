@@ -26,14 +26,14 @@ class MessageHandlers:  # Define a classe MessageHandlers, que contém métodos 
     def handle_initial_state(self, user_id: str, text: str) -> Dict:  # Define o método handle_initial_state, que lida com o estado inicial de um usuário. Ele recebe o ID do usuário e o texto da mensagem como entrada e retorna um dicionário.
         user_exists = check_phone_number(user_id)  # Chama a função check_phone_number para verificar se o número de telefone do usuário existe no banco de dados.
         if user_exists:  # Se o usuário existir no banco de dados:
-            first_name = get_client_first_name(user_id)  # Obtém o primeiro nome do cliente usando a função get_client_first_name.
+            first_name = get_client_first_name(user_id).capitalize()  # Obtém o primeiro nome do cliente usando a função get_client_first_name.
             self.api.send_message(user_id, f"Olá, {first_name}! Tudo bem?")  # Envia uma mensagem de saudação personalizada para o usuário.
-            time.sleep(6)  # Pausa a execução do código por 6 segundos. Isso pode ser usado para evitar sobrecarregar a API do WhatsApp ou para dar tempo ao usuário para ler a mensagem.
+            time.sleep(0.3)  # Pausa a execução do código por 6 segundos. Isso pode ser usado para evitar sobrecarregar a API do WhatsApp ou para dar tempo ao usuário para ler a mensagem.
             result = self.handle_check_debts(user_id, text)  # Chama o método handle_check_debts para verificar se o usuário possui dívidas.
             return result  # Retorna o resultado do método handle_check_debts.
         else:  # Se o usuário não existir no banco de dados:
             self.api.send_message(user_id, "Olá, tudo bem? Não tenho seu número relacionado no soniatech!")  # Envia uma mensagem informando que o número do usuário não está cadastrado.
-            time.sleep(6)  # Pausa a execução do código por 6 segundos.
+            time.sleep(0.3)  # Pausa a execução do código por 6 segundos.
             self.api.send_message(user_id, "Para resolver isso, insira seu número no soniatech! Te espero na próxima!")  # Envia uma mensagem instruindo o usuário a inserir seu número no sistema.
             result = {'new_state': 'END_FLOW', 'reply': None}  # Define o resultado como um dicionário indicando que o fluxo deve ser encerrado.
             return result  # Retorna o resultado.
@@ -43,12 +43,16 @@ class MessageHandlers:  # Define a classe MessageHandlers, que contém métodos 
         has_debts = check_user_debts(user_id)  # Chama a função check_user_debts para verificar se o usuário tem dívidas.
         if has_debts:  # Se o usuário tiver dívidas:
             debt_amount = get_user_debt_amount(user_id)  # Obtém o valor total das dívidas do usuário.
+            if debt_amount == int(debt_amount):
+                debt_formatted = str(int(debt_amount))  # Ex: 13.00 → "13"
+            else:
+                debt_formatted = str(debt_amount).replace('.', ',')  # Ex: 13.03 → "13,03"
             message = {  # Define a mensagem interativa a ser enviada ao usuário.
                 "type": "interactive",  # Define o tipo da mensagem como interativa.
                 "interactive": {  # Define o conteúdo da mensagem interativa.
                     "type": "button",  # Define o tipo de interatividade como botões.
                     "body": {  # Define o corpo da mensagem.
-                        "text": f"Você possui dívidas pendentes no valor de R$ {debt_amount:.2f}. Deseja pagar as dívidas?"  # Define o texto da mensagem, informando o valor da dívida e perguntando se o usuário deseja pagar.
+                        "text": f"Olá! Seu débito é de *R${debt_formatted}*.\nPosso ajudar a regularizar?"  # Define o texto da mensagem, informando o valor da dívida e perguntando se o usuário deseja pagar.
                     },
                     "action": {  # Define as ações que o usuário pode realizar.
                         "buttons": [  # Define os botões que serão exibidos.
@@ -56,14 +60,14 @@ class MessageHandlers:  # Define a classe MessageHandlers, que contém métodos 
                                 "type": "reply",  # Define o tipo do botão como uma resposta.
                                 "reply": {  # Define a resposta associada ao botão.
                                     "id": "pay_yes",  # Define o ID da resposta (para identificar a ação).
-                                    "title": "Sim"  # Define o título do botão como "Sim".
+                                    "title": "✅ Quero pagar agora"  # Define o título do botão como "Sim".
                                 }
                             },
                             {
                                 "type": "reply",  # Define o tipo do botão como uma resposta.
                                 "reply": {  # Define a resposta associada ao botão.
                                     "id": "pay_no",  # Define o ID da resposta (para identificar a ação).
-                                    "title": "Não"  # Define o título do botão como "Não".
+                                    "title": "❌ Quero pagar depois"  # Define o título do botão como "Não".
                                 }
                             }
                         ]
@@ -82,94 +86,20 @@ class MessageHandlers:  # Define a classe MessageHandlers, que contém métodos 
     def handle_awaiting_debt_payment(self, user_id, message_text) -> Dict:
         logger.info(f"User {user_id} sent message: {message_text}")  # Registra a mensagem enviada pelo usuário.
         logger.info(f"Processing debt payment decision for user {user_id} with message: {message_text}")  # Registra que está processando a decisão do usuário sobre o pagamento da dívida.
-        if isinstance(message_text, str):  # Verifica se a mensagem do usuário é uma string.
-            if message_text in ["sim", "yes"]:  # Se a mensagem for "sim" ou "yes" (em português ou inglês):
+        if isinstance(message_text, str):
+            print(message_text)  # Verifica se a mensagem do usuário é uma string.
+            if message_text == "✅ quero pagar agora":  # Se a mensagem for "sim" ou "yes" (em português ou inglês):
                 result = self.payment_handlers.handle_pix_payment(user_id)  # Chama o método handle_pix_payment para iniciar o processo de pagamento via PIX.
                 return result  # Retorna o resultado do processo de pagamento.
-            elif message_text in ["nao", "não", "no"]:  # Se a mensagem for "nao", "não" ou "no" (em português ou inglês):
+            elif message_text == "❌ quero pagar depois":  # Se a mensagem for "nao", "não" ou "no" (em português ou inglês):
                 self.api.send_message(user_id, "Entendido! Caso mude de ideia, estamos à disposição.")  # Envia uma mensagem informando que entendeu a decisão do usuário.
                 result = {'new_state': 'INITIAL', 'reply': None}  # Define o novo estado como "INITIAL" (estado inicial) e a resposta como None.
                 return result  # Retorna o resultado.
             else:  # Se a mensagem não for "sim", "yes", "nao", "não" ou "no":
-                debt_amount = self.payment_handlers.get_user_debt_amount(user_id)  # Obtém o valor da dívida do usuário.
-                interactive_message = {  # Define a mensagem interativa a ser enviada ao usuário.
-                    "messaging_product": "whatsapp",  # Especifica que a mensagem é para o WhatsApp.
-                    "to": user_id,  # Define o destinatário da mensagem (o ID do usuário).
-                    "type": "interactive",  # Define o tipo da mensagem como interativa.
-                    "interactive": {  # Define o conteúdo da mensagem interativa.
-                        "type": "button",  # Define o tipo de interatividade como botões.
-                        "body": {  # Define o corpo da mensagem.
-                            "text": f"Você possui dívidas pendentes no valor de R$ {debt_amount:.2f}. Deseja pagar as dívidas?"  # Define o texto da mensagem, informando o valor da dívida e perguntando se o usuário deseja pagar.
-                        },
-                        "action": {  # Define as ações que o usuário pode realizar.
-                            "buttons": [  # Define os botões que serão exibidos.
-                                {
-                                    "type": "reply",  # Define o tipo do botão como uma resposta.
-                                    "reply": {  # Define a resposta associada ao botão.
-                                        "id": "pay_yes",  # Define o ID da resposta (para identificar a ação).
-                                        "title": "Sim"  # Define o título do botão como "Sim".
-                                    }
-                                },
-                                {
-                                    "type": "reply",  # Define o tipo do botão como uma resposta.
-                                    "reply": {  # Define a resposta associada ao botão.
-                                        "id": "pay_no",  # Define o ID da resposta (para identificar a ação).
-                                        "title": "Não"  # Define o título do botão como "Não".
-                                    }
-                                }
-                            ]
-                        }
-                    }
-                }
-                self.api.send_interactive_message(user_id, interactive_message)  # Envia a mensagem interativa para o usuário.
+                message_error = "Por favor, selecione uma das opções disponíveis."  # Define uma mensagem de erro solicitando que o usuário selecione uma das opções disponíveis.
+                self.api.send_message(user_id, message_error)  # Envia a mensagem de erro para o usuário.
                 result = {'new_state': 'AWAITING_DEBT_PAYMENT', 'reply': None}  # Define o novo estado como "AWAITING_DEBT_PAYMENT" (aguardando a decisão de pagamento) e a resposta como None.
                 return result  # Retorna o resultado.
-        elif isinstance(message_text, dict) and 'id' in message_text:  # Verifica se a mensagem do usuário é um dicionário e contém o campo 'id'.
-            if message_text.get('id') == "pay_yes":  # Se o campo 'id' for "pay_yes":
-                result = self.payment_handlers.handle_pix_payment(user_id)  # Chama o método handle_pix_payment para iniciar o processo de pagamento via PIX.
-                return result  # Retorna o resultado do processo de pagamento.
-            elif message_text.get('id') == "pay_no":  # Se o campo 'id' for "pay_no":
-                self.api.send_message(user_id, "Entendido! Caso mude de ideia, estamos à disposição.")  # Envia uma mensagem informando que entendeu a decisão do usuário.
-                result = {'new_state': 'INITIAL', 'reply': None}  # Define o novo estado como "INITIAL" (estado inicial) e a resposta como None.
-                return result  # Retorna o resultado.
-            else:  # Se o campo 'id' não for "pay_yes" ou "pay_no":
-                self.api.send_message(user_id, "Por favor, selecione uma das opções disponíveis.")  # Envia uma mensagem solicitando que o usuário selecione uma das opções disponíveis.
-                result = {'new_state': 'AWAITING_DEBT_PAYMENT', 'reply': None}  # Define o novo estado como "AWAITING_DEBT_PAYMENT" (aguardando a decisão de pagamento) e a resposta como None.
-                return result  # Retorna o resultado.
-        else:  # Se a mensagem do usuário não for uma string ou um dicionário válido:
-            debt_amount = self.payment_handlers.get_user_debt_amount(user_id)  # Obtém o valor da dívida do usuário.
-            interactive_message = {  # Define a mensagem interativa a ser enviada ao usuário.
-                "messaging_product": "whatsapp",  # Especifica que a mensagem é para o WhatsApp.
-                "to": user_id,  # Define o destinatário da mensagem (o ID do usuário).
-                "type": "interactive",  # Define o tipo da mensagem como interativa.
-                "interactive": {  # Define o conteúdo da mensagem interativa.
-                    "type": "button",  # Define o tipo de interatividade como botões.
-                    "body": {  # Define o corpo da mensagem.
-                        "text": f"Você possui dívidas pendentes no valor de R$ {debt_amount:.2f}. Deseja pagar as dívidas?"  # Define o texto da mensagem, informando o valor da dívida e perguntando se o usuário deseja pagar.
-                    },
-                    "action": {  # Define as ações que o usuário pode realizar.
-                        "buttons": [  # Define os botões que serão exibidos.
-                            {
-                                "type": "reply",  # Define o tipo do botão como uma resposta.
-                                "reply": {  # Define a resposta associada ao botão.
-                                    "id": "pay_yes",  # Define o ID da resposta (para identificar a ação).
-                                    "title": "Sim"  # Define o título do botão como "Sim".
-                                }
-                            },
-                            {
-                                "type": "reply",  # Define o tipo do botão como uma resposta.
-                                "reply": {  # Define a resposta associada ao botão.
-                                    "id": "pay_no",  # Define o ID da resposta (para identificar a ação).
-                                    "title": "Não"  # Define o título do botão como "Não".
-                                }
-                            }
-                        ]
-                    }
-                }
-            }
-            self.api.send_interactive_message(user_id, interactive_message)  # Envia a mensagem interativa para o usuário.
-            result = {'new_state': 'AWAITING_DEBT_PAYMENT', 'reply': None}  # Define o novo estado como "AWAITING_DEBT_PAYMENT" (aguardando a decisão de pagamento) e a resposta como None.
-            return result  # Retorna o resultado.
     
     def handle_pix_confirmation(self, user_id, message_text):
         logger.info(f"User {user_id} sent message: {message_text}")
