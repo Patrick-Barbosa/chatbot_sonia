@@ -49,31 +49,6 @@ def session_cleaner():
         if cleaned > 0:  # Verifica se alguma sessão foi removida.
             print(f"Limpeza: {cleaned} sessões expiradas removidas")  # Imprime a mensagem no console.
 
-def handle_end_flow(user_id, text):
-    """
-    Trata o estado END_FLOW: limpa a sessão do usuário e reinicia o fluxo imediatamente.
-    
-    Args:
-        user_id (str): Identificador do usuário.
-        text (str): Texto recebido (não necessariamente utilizado aqui).
-    
-    Returns:
-        dict: Dicionário com 'new_state' e 'reply'.
-    """
-    # Limpa a sessão do usuário
-    session_manager.clean_session(user_id)
-    
-    # Opcional: força a criação de uma nova sessão (agora com estado INITIAL)
-    session_manager.get_session(user_id)
-    
-    # Pode chamar o handler do estado INITIAL para retornar uma mensagem de boas-vindas
-    response = message_handlers.handle_initial_state(user_id, text)
-    
-    return {
-        'new_state': 'INITIAL',  # Reinicia o fluxo para o estado inicial
-        'reply': response.get('reply', "Fluxo reiniciado! Como posso ajudar?")
-    }
-
 
 threading.Thread(target=session_cleaner, daemon=True).start()  # Inicia a thread de limpeza de sessões. 'daemon=True' faz com que a thread termine quando o programa principal terminar.
 
@@ -133,23 +108,22 @@ def webhook():
                 'INITIAL': message_handlers.handle_initial_state,  # Estado inicial.
                 'AWAITING_DEBT_PAYMENT': message_handlers.handle_awaiting_debt_payment,  # Aguardando pagamento da dívida.
                 'AWAITING_PIX_CONFIRMATION': message_handlers.handle_pix_confirmation,  # Aguardando confirmação do PIX.
-                #'AWAITING_ACTION': message_handlers.handle_awaiting_action,  # Aguardando ação.
-                'END_FLOW': handle_end_flow,  # Estado final.
-                'NULO': None
+                'END_FLOW': None  # Estado final.
             }
             
             handler = state_handlers.get(current_state)  # Obtém a função de tratamento para o estado atual.
-            try: # Verifica se uma função de tratamento foi encontrada para o estado atual.
-                response = handler(user_id, text)  # Chama a função de tratamento com o ID do usuário e o texto da mensagem.
-                new_state = response.get('new_state', current_state)  # Obtém o novo estado da resposta. Se não houver novo estado, mantém o estado atual.
-                reply = response.get('reply')  # Obtém a mensagem de resposta da resposta.
-                
-                if reply:  # Verifica se há uma mensagem de resposta.
-                    console_logger.info(f"{timestamp} Bot: {reply}")  # Imprime a mensagem de resposta no console.
-                
+            response = handler(user_id, text)  # Chama a função de tratamento com o ID do usuário e o texto da mensagem.
+            new_state = response.get('new_state', current_state)  # Obtém o novo estado da resposta. Se não houver novo estado, mantém o estado atual.
+            reply = response.get('reply')  # Obtém a mensagem de resposta da resposta.
+            
+            if reply:  # Verifica se há uma mensagem de resposta.
+                console_logger.info(f"{timestamp} Bot: {reply}")  # Imprime a mensagem de resposta no console.
+            
+            if new_state == 'END_FLOW':  # Verifica se o novo estado é o final do fluxo.
+                session_manager.clean_session(user_id)  # Remove a sessão do usuário se o fluxo foi encerrado.
+            else:
                 session_manager.update_session(user_id, new_state)  # Atualiza o estado da sessão do usuário.
-            except:
-                session_manager.update_session(user_id, 'INITIAL')
+    
         return jsonify({"status": "success"}), 200  # Retorna uma resposta JSON com o status de sucesso e o código 200 (OK).
 
 if __name__ == '__main__':  # Verifica se o script está sendo executado diretamente (não importado como um módulo).

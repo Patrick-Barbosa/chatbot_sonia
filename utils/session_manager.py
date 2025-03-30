@@ -93,7 +93,7 @@ class SessionManager:
             del self.sessions[user_id]
         return len(expired)
     
-    def clean_session(self, user_id: str, misterio) -> bool:
+    def clean_session(self, user_id: str) -> bool:
         """
         Remove a sessão específica de um usuário, se existir.
 
@@ -105,6 +105,7 @@ class SessionManager:
         """
         if user_id in self.sessions:
             del self.sessions[user_id]
+            logging.debug(f"Session completely removed for user {user_id}")
             return True
         else:
             return False
