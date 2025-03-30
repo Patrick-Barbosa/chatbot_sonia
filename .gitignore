@@ -2,3 +2,4 @@
 .env
 /utils/__pycache__
 /env
+/.temp

@@ -1,77 +1,119 @@
 from .whatsapp_api import WhatsAppAPI
-import mercadopago
 from dotenv import load_dotenv
 import os
 from .database_functions import get_user_debt_amount, update_payment_status
+import logging
 
 load_dotenv()
 
 class PaymentHandlers:
+    """
+    Gerenciador de Pagamentos via WhatsApp
+    
+    Esta classe gerencia todas as operações relacionadas a pagamentos,
+    incluindo geração de códigos PIX e confirmação de pagamentos.
+    
+    Atributos:
+        api: Instância da API do WhatsApp para envio de mensagens
+    """
+
     def __init__(self):
+        """
+        Inicializa o gerenciador de pagamentos configurando a API do WhatsApp
+        """
         self.api = WhatsAppAPI()
-        self.mp = mercadopago.SDK(os.getenv('MERCADO_PAGO_ACCESS_TOKEN'))
+        logging.debug("PaymentHandlers initialized.")
 
     def handle_pix_payment(self, user_id, message_text=None):
-        """Inicia o processo de pagamento via Pix."""
-        try:
-            # Implement Mercado Pago Pix generation here
-            payment_data = {
-                "transaction_amount": float(self.get_user_debt_amount(user_id)),
-                "payment_method_id": "pix",
-                "payer": {
-                    "email": "test@test.com"  # This should come from the database
-                }
-            }
-            payment_response = self.mp.payment().create(payment_data)
+        """
+        Processa uma solicitação de pagamento via PIX
+        
+        Gera um código PIX fictício e envia para o usuário através do WhatsApp.
+        Em um ambiente real, este código seria gerado por uma API de pagamentos.
+        
+        Args:
+            user_id: Identificador único do usuário no WhatsApp
+            message_text: Texto da mensagem recebida (não utilizado atualmente)
             
-            if payment_response["status"] == 201:
-                pix_code = payment_response["response"]["point_of_interaction"]["transaction_data"]["qr_code"]
-                self.api.send_message(user_id, f"Por favor, use o seguinte código Pix para pagamento:\n{pix_code}")
-                return "AWAITING_PIX_CONFIRMATION"
-            else:
-                self.api.send_message(user_id, "Desculpe, houve um erro ao gerar o Pix. Tente novamente mais tarde.")
-                return "END_FLOW"
+        Returns:
+            dict: Dicionário contendo o novo estado da conversa e a resposta
+        """
+        logging.debug(f"Initiating PIX payment for user {user_id}")
+        try:
+            mock_pix_code = "00020126580014BR.GOV.BCB.PIX0136random-key-mock-pix-example5204000053039865802BR5913Test merchant6008Sao Paulo62070503***6304E2CA"
+            self.api.send_message(user_id, f"Por favor, use o seguinte código Pix para pagamento:\n{mock_pix_code}")
+            return {'new_state': 'AWAITING_PIX_CONFIRMATION', 'reply': None}
         except Exception as e:
             print(f"Erro ao gerar Pix: {e}")
-            self.api.send_message(user_id, "Desculpe, houve um erro ao gerar o Pix. Tente novamente mais tarde.")
-            return "END_FLOW"
+            return {'new_state': 'END_FLOW', 'reply': None}
 
     def handle_pix_confirmation(self, user_id, message_text):
-        """Confirmação do pagamento via Pix."""
-        if message_text.lower() == "sim":
-            self.api.send_message(user_id, "Aguardando confirmação do pagamento...")
-            return "AWAITING_WEBHOOK"
-        elif message_text.lower() == "não":
-            self.api.send_message(user_id, "Pagamento cancelado. Volte sempre!")
-            return "END_FLOW"
-        else:
-            self.api.send_message(user_id, "Por favor, responda com 'sim' ou 'não'.")
-            return "AWAITING_PIX_CONFIRMATION"
+        """
+        Processa a confirmação de pagamento PIX enviada pelo usuário
+        
+        Verifica se o usuário confirmou o pagamento enviando a palavra 'PAGO'.
+        Em um ambiente real, isso seria validado através de um webhook do banco.
+        
+        Args:
+            user_id: Identificador único do usuário no WhatsApp
+            message_text: Texto da mensagem de confirmação
+            
+        Returns:
+            dict: Dicionário contendo o novo estado da conversa e a resposta
+        """
+        logging.debug(f"Received PIX confirmation input from user {user_id}: {message_text}")
+        if message_text and message_text.lower() == "pago":
+            self.handle_webhook_confirmation(user_id)
+            return {'new_state': 'END_FLOW', 'reply': None}
+        self.api.send_message(user_id, "Envie 'PAGO' para confirmar o pagamento.")
+        return {'new_state': 'AWAITING_PIX_CONFIRMATION', 'reply': None}
 
     def handle_webhook_confirmation(self, user_id):
-        """Aguarda a confirmação do pagamento via webhook."""
-        payment_status = self.check_payment_status(user_id)
-        if payment_status == "PAID":
-            # Update payment status in database
-            if update_payment_status(user_id, "MP_" + str(payment_status.get('id', ''))):
-                self.api.send_message(user_id, "Pagamento confirmado! Muito obrigado!")
-                return "END_FLOW"
-            else:
-                self.api.send_message(user_id, "Erro ao processar pagamento. Por favor, contate o suporte.")
-                return "END_FLOW"
-        elif payment_status == "FAILED":
-            self.api.send_message(user_id, "Ocorreu um problema no pagamento. Tente novamente.")
-            return "END_FLOW"
-        else:
-            self.api.send_message(user_id, "Ainda aguardando a confirmação do pagamento...")
-            return "AWAITING_WEBHOOK"
+        """
+        Simula o recebimento de uma confirmação de pagamento via webhook
+        
+        Em um ambiente real, este método seria chamado quando o banco
+        notificasse o sistema sobre um pagamento recebido.
+        
+        Args:
+            user_id: Identificador único do usuário no WhatsApp
+            
+        Returns:
+            dict: Dicionário contendo o novo estado da conversa e a resposta
+        """
+        logging.debug(f"Confirming webhook payment for user {user_id}")
+        update_payment_status(user_id, "MOCK_PAYMENT_" + str(hash(user_id)))
+        self.api.send_message(user_id, "Pagamento confirmado! Muito obrigado!")
+        return {'new_state': 'END_FLOW', 'reply': None}
 
     def check_payment_status(self, user_id):
-        """Simula a verificação do status do pagamento via webhook."""
-        # Replace this logic with actual webhook handling
-        return "PAID"  # Simulated response: "PAID" or "FAILED"
+        """
+        Verifica o status do pagamento de um usuário
+        
+        Esta é uma implementação simulada que sempre retorna 'PAID'.
+        Em um ambiente real, consultaria o status real no banco de dados.
+        
+        Args:
+            user_id: Identificador único do usuário no WhatsApp
+            
+        Returns:
+            str: Status do pagamento ('PAID' nesta simulação)
+        """
+        logging.debug(f"Checking payment status for user {user_id}")
+        return "PAID"
 
     def get_user_debt_amount(self, user_id):
-        """Simula a obtenção do valor devido pelo usuário."""
-        # Replace this logic with actual database query
-        return 100.0  # Simulated debt amount
+        """
+        Obtém o valor da dívida de um usuário
+        
+        Esta é uma implementação simulada que sempre retorna R$ 100,00.
+        Em um ambiente real, consultaria o valor real no banco de dados.
+        
+        Args:
+            user_id: Identificador único do usuário no WhatsApp
+            
+        Returns:
+            float: Valor da dívida (R$ 100,00 nesta simulação)
+        """
+        logging.debug(f"Retrieving debt amount for user {user_id}")
+        return 100.0
